@@ -1,0 +1,16 @@
+name: smart-chef
+acli_version: 1.7.0
+agent_directory: app
+region: us-east1
+base_template: adk
+generated_at: '2026-09-27T07:41:24.789745+00:00'
+language: python
+framework: google-adk
+create_params:
+  root_agent_name: smart_chef
+  deployment_target: cloud_run
+  session_type: in_memory
+  cicd_runner: skip
+  is_a2a: true
+  agent_gateway: false
+  agent_guidance_filename: GEMINI.md
