@@ -583,7 +583,11 @@ function buildNode(id, comps, seen) {
 function renderSurface(messages, container) {
   const comps = {};
   const roots = [];
-  for (const m of messages) {
+  for (let m of messages) {
+    if (typeof m === "string") {
+      try { m = JSON.parse(m); } catch (e) { continue; }
+    }
+    if (!m || typeof m !== "object") continue;
     if (m.beginRendering && typeof m.beginRendering.root === "string") roots.push(m.beginRendering.root);
     const su = m.surfaceUpdate;
     if (su && Array.isArray(su.components)) for (const c of su.components) if (c && c.id && c.component) comps[c.id] = c.component;
@@ -601,9 +605,22 @@ function renderSurface(messages, container) {
 
 function flattenText(messages) {
   const out = [];
-  for (const m of messages) {
+  for (let m of messages) {
+    if (typeof m === "string") {
+      try { m = JSON.parse(m); } catch (e) {}
+    }
+    if (!m || typeof m !== "object") continue;
     const su = m.surfaceUpdate;
-    if (su && Array.isArray(su.components)) for (const c of su.components) if (c && c.component && c.component.Text) out.push(boundStr(c.component.Text.text));
+    if (su && Array.isArray(su.components)) {
+      for (const c of su.components) {
+        if (c && c.component) {
+          const spec = c.component;
+          for (const key in spec) {
+            if (spec[key] && spec[key].text) out.push(boundStr(spec[key].text));
+          }
+        }
+      }
+    }
   }
   return out.join("\n").trim();
 }
@@ -611,16 +628,36 @@ function flattenText(messages) {
 function renderReply(b, parts) {
   b.textContent = "";
   const texts = parts.filter(p => p && (p.kind === "text" || (!p.kind && p.text))).map(p => p.text || "");
-  const a2ui = parts.filter(p => p && p.kind === "a2ui" && p.data).map(p => p.data);
+  const a2uiRaw = parts.filter(p => p && p.kind === "a2ui" && p.data).map(p => p.data);
+  const a2ui = [];
+  for (const item of a2uiRaw) {
+    if (Array.isArray(item)) a2ui.push(...item);
+    else if (item && typeof item === "object") a2ui.push(item);
+    else if (typeof item === "string") {
+      try {
+        const parsed = JSON.parse(item);
+        if (Array.isArray(parsed)) a2ui.push(...parsed);
+        else if (parsed && typeof parsed === "object") a2ui.push(parsed);
+      } catch (e) {}
+    }
+  }
 
   const textStr = texts.join("\n").trim();
   if (textStr) b.appendChild(el("div", null, textStr));
 
   if (a2ui.length) {
-    b.classList.add("rich");
-    if (!renderSurface(a2ui, b)) b.appendChild(el("div", null, flattenText(a2ui) || "(no card content)"));
+    const cardContainer = el("div", "a2ui-card-wrapper");
+    if (renderSurface(a2ui, cardContainer)) {
+      b.classList.add("rich");
+      b.appendChild(cardContainer);
+    } else {
+      const fallbackText = flattenText(a2ui);
+      if (fallbackText) {
+        b.appendChild(el("div", null, fallbackText));
+      }
+    }
   }
-  if (!b.childNodes.length) b.textContent = "(no response)";
+  if (!b.childNodes.length) b.textContent = "I'm ready to help! Ask me anything about recipes or your pantry stock.";
   log.scrollTop = log.scrollHeight;
 }
 

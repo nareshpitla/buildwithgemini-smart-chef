@@ -124,6 +124,21 @@ async def _get_card(client: httpx.AsyncClient) -> AgentCard:
     return _card
 
 
+def _is_a2ui_data(data) -> bool:
+    if not data:
+        return False
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except Exception:
+            return False
+    if isinstance(data, list):
+        return any(_is_a2ui_data(item) for item in data)
+    if isinstance(data, dict):
+        return "beginRendering" in data or "surfaceUpdate" in data
+    return False
+
+
 def _extract_parts(parts: list) -> list[dict]:
     """Turn A2A response parts into structured parts for the chat UI.
 
@@ -139,10 +154,11 @@ def _extract_parts(parts: list) -> list[dict]:
             if "text" in root and root["text"]:
                 out.append({"kind": "text", "text": root["text"]})
             elif "data" in root and root["data"] is not None:
+                data = root["data"]
                 meta = root.get("metadata") or {}
                 mime = meta.get("mimeType") if isinstance(meta, dict) else None
-                if mime == _A2UI_MIME or not mime:
-                    out.append({"kind": "a2ui", "data": root["data"]})
+                if mime == _A2UI_MIME or _is_a2ui_data(data):
+                    out.append({"kind": "a2ui", "data": data})
             continue
 
         if isinstance(root, TextPart) or hasattr(root, "text"):
@@ -150,10 +166,11 @@ def _extract_parts(parts: list) -> list[dict]:
             if txt:
                 out.append({"kind": "text", "text": txt})
         elif getattr(root, "data", None) is not None:
+            data = getattr(root, "data")
             meta = getattr(root, "metadata", None) or {}
             mime = meta.get("mimeType") if isinstance(meta, dict) else getattr(meta, "mimeType", None)
-            if mime == _A2UI_MIME or not mime:
-                out.append({"kind": "a2ui", "data": getattr(root, "data")})
+            if mime == _A2UI_MIME or _is_a2ui_data(data):
+                out.append({"kind": "a2ui", "data": data})
         elif isinstance(root, FilePart):
             uri = getattr(getattr(root, "file", None), "uri", None)
             if uri:
